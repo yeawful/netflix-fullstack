@@ -1,0 +1,119 @@
+import { EpisodesCarousel } from '@/features/series/EpisodesCarousel'
+import { SeriesMain } from '@/features/series/SeriesMain'
+import { VideoModal } from '@/features/series/VideoModal'
+import prisma from '@/lib/prisma/prisma'
+import type { Metadata } from 'next'
+import Image from 'next/image'
+import { notFound } from 'next/navigation'
+
+type TParams = {
+	params: Promise<{ slug: string }>
+	searchParams: Promise<{ ep?: string }>
+}
+
+export const dynamic = 'force-dynamic'
+
+export async function generateMetadata({ params }: TParams): Promise<Metadata> {
+	const resolvedParams = await params
+
+	const series = await prisma.series.findUnique({
+		where: { slug: resolvedParams.slug },
+		select: {
+			title: true,
+			description: true,
+			imageUrl: true,
+			slug: true
+		}
+	})
+
+	if (!series) return {}
+
+	const url = `https://localhost:3000/series/${series.slug}`
+
+	return {
+		title: series.title,
+		description: series.description,
+		alternates: {
+			canonical: url
+		},
+		openGraph: {
+			title: series.title,
+			description: series.description,
+			url,
+			siteName: 'RED Series',
+			type: 'video.tv_show',
+			images: [
+				{
+					url: series.imageUrl,
+					width: 1200,
+					height: 630
+				}
+			]
+		},
+		twitter: {
+			card: 'summary_large_image',
+			title: series.title,
+			description: series.description,
+			images: [series.imageUrl]
+		},
+		robots: {
+			index: true,
+			follow: true
+		}
+	}
+}
+
+// export async function generateStaticParams() {
+// 	const series = await prisma.series.findMany({
+// 		select: { slug: true }
+// 	})
+
+// 	return series.map(item => ({
+// 		slug: item.slug
+// 	}))
+// }
+
+export default async function Page({ params, searchParams }: TParams) {
+	const resolvedParams = await params
+	const resolvedSearchParams = await searchParams
+
+	const series = await prisma.series.findUnique({
+		where: { slug: resolvedParams.slug },
+		include: {
+			genres: true,
+			episodes: {
+				orderBy: { number: 'asc' }
+			}
+		}
+	})
+
+	if (!series) notFound()
+
+	const activeEpisode =
+		resolvedSearchParams.ep &&
+		series.episodes.find(
+			ep => ep.number === parseInt(resolvedSearchParams?.ep ?? '1', 10)
+		)
+
+	return (
+		<main className="min-h-screen bg-black text-white relative">
+			<Image
+				src={series.imageUrl}
+				alt={series.title}
+				fill
+				priority
+				className="object-cover"
+			/>
+			<div className="absolute inset-0 bg-linear-to-t from-black via-black/60 to-transparent" />
+
+			<SeriesMain series={series} />
+			<EpisodesCarousel series={series} />
+			{activeEpisode && (
+				<VideoModal
+					seriesSlug={series.slug}
+					episode={activeEpisode}
+				/>
+			)}
+		</main>
+	)
+}

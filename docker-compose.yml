@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+    container_name: Netflix
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '3000:3000'
